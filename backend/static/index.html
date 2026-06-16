@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seebug AI - Monitoreo de Trampa de Insectos en Tiempo Real</title>
+    <meta name="description" content="Dashboard premium de monitoreo e identificación de insectos (Abejas, Escarabajos, Avispas) utilizando Inteligencia Artificial y ESP32-CAM.">
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Fondos de Luz Neon Aura -->
+    <div class="glow-bg glow-1"></div>
+    <div class="glow-bg glow-2"></div>
+    <div class="glow-bg glow-3"></div>
+
+    <div class="dashboard-container">
+        <!-- HEADER -->
+        <header class="dashboard-header" id="header-section">
+            <div class="header-logo">
+                <div class="logo-icon-container">
+                    <i data-lucide="scan-eye" class="logo-icon"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>Seebug <span class="accent-text">AI</span></h1>
+                    <p class="tagline">Monitoreo Inteligente de Trampas</p>
+                </div>
+            </div>
+            
+            <div class="header-status">
+                <div id="connection-badge" class="status-badge connecting">
+                    <span class="pulse-dot"></span>
+                    <span id="connection-text">Conectando Backend...</span>
+                </div>
+                
+                <div class="system-time" id="system-time">
+                    <i data-lucide="clock" class="icon-small"></i>
+                    <span id="time-display">--:--:--</span>
+                </div>
+
+                <button id="btn-sound-toggle" class="btn-icon-toggle" title="Activar/Silenciar sonido de alerta">
+                    <i data-lucide="volume-2" id="sound-icon"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <main class="dashboard-grid">
+            
+            <!-- COLUMNA IZQUIERDA: VIDEO EN VIVO -->
+            <section class="card glass-card stream-section" id="stream-card">
+                <div class="card-header">
+                    <div class="card-title-group">
+                        <i data-lucide="video" class="icon-accent"></i>
+                        <h2>Transmisión en Vivo</h2>
+                    </div>
+                    <div class="live-indicator">
+                        <span class="live-pulse"></span>
+                        <span>LIVE</span>
+                    </div>
+                </div>
+                
+                <div class="video-wrapper">
+                    <!-- Overlay de Escaneo y Cuadrícula -->
+                    <div class="scanlines"></div>
+                    <div class="overlay-hud">
+                        <div class="hud-top-left">CAM_01 // RESOLUTION: SVGA</div>
+                        <div class="hud-top-right" id="hud-fps">FPS: 25 [ESTABLE]</div>
+                        <div class="hud-bottom-left">REC ●</div>
+                        <div class="hud-bottom-right" id="hud-mode">MODE: SIMULACIÓN</div>
+                    </div>
+                    <!-- Streaming de Video MJPEG de FastAPI -->
+                    <img id="video-stream" src="/api/video_feed" alt="Streaming de cámara no disponible" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22600%22 viewBox=%220 0 800 600%22><rect width=%22100%25%22 height=%22100%25%22 fill=%22%231a1b26%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22sans-serif%22 font-size=%2224%22 fill=%22%23ff5e5e%22>Streaming no disponible. Conectando servidor...</text></svg>'">
+                </div>
+
+                <div class="stream-controls">
+                    <div class="camera-info">
+                        <i data-lucide="info" class="icon-small text-muted"></i>
+                        <span class="text-muted" id="camera-source-info">Iniciando origen de video...</span>
+                    </div>
+                    <div class="control-actions">
+                        <button id="btn-snap" class="btn btn-secondary">
+                            <i data-lucide="camera" class="icon-small"></i> Capturar Foto
+                        </button>
+                        <button id="btn-fullscreen" class="btn btn-icon" title="Pantalla Completa">
+                            <i data-lucide="maximize-2" class="icon-small"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- COLUMNA DERECHA: ANALÍTICAS Y DETECCIONES -->
+            <div class="right-column-grid">
+                
+                <!-- CARD 1: CONTADORES POR ESPECIE -->
+                <section class="card glass-card counters-section" id="counters-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <i data-lucide="bar-chart-3" class="icon-accent"></i>
+                            <h2>Conteo de Especies</h2>
+                        </div>
+                        <span class="badge badge-accent">Total</span>
+                    </div>
+                    
+                    <div class="species-grid">
+                        <!-- Abeja -->
+                        <div class="species-card card-abeja" id="counter-abeja-card">
+                            <div class="species-icon-bg">🐝</div>
+                            <div class="species-info">
+                                <h3>Abejas</h3>
+                                <div class="counter-value" id="count-abeja">0</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Escarabajo -->
+                        <div class="species-card card-escarabajo" id="counter-escarabajo-card">
+                            <div class="species-icon-bg">🪲</div>
+                            <div class="species-info">
+                                <h3>Escarabajos</h3>
+                                <div class="counter-value" id="count-escarabajo">0</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Avispa -->
+                        <div class="species-card card-avispa" id="counter-avispa-card">
+                            <div class="species-icon-bg">🐝</div>
+                            <div class="species-info">
+                                <h3>Avispas</h3>
+                                <div class="counter-value" id="count-avispa">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- CARD 2: GRÁFICOS DE TENDENCIAS -->
+                <section class="card glass-card charts-section" id="charts-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <i data-lucide="trending-up" class="icon-accent"></i>
+                            <h2>Tendencia de Detecciones</h2>
+                        </div>
+                        <div class="chart-toggle">
+                            <button id="btn-chart-hourly" class="btn-toggle active">24h</button>
+                            <button id="btn-chart-daily" class="btn-toggle">7 Días</button>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <canvas id="trendsChart"></canvas>
+                    </div>
+                </section>
+            </div>
+
+            <!-- FILA INFERIOR: GALERÍA DE IMÁGENES -->
+            <section class="card glass-card gallery-section" id="gallery-card">
+                <div class="card-header">
+                    <div class="card-title-group">
+                        <i data-lucide="images" class="icon-accent"></i>
+                        <h2>Registro de Detecciones en Galería</h2>
+                    </div>
+                    <div class="gallery-filters" id="gallery-filters-group">
+                        <button class="filter-btn active" data-filter="all">Todos</button>
+                        <button class="filter-btn" data-filter="Abeja">🐝 Abejas</button>
+                        <button class="filter-btn" data-filter="Escarabajo">🪲 Escarabajos</button>
+                        <button class="filter-btn" data-filter="Avispa">📐 Avispas</button>
+                    </div>
+                </div>
+
+                <!-- Contenedor de la Galería -->
+                <div class="gallery-grid" id="gallery-grid">
+                    <!-- Las tarjetas de insectos se cargarán aquí dinámicamente -->
+                </div>
+                
+                <!-- Estado vacío de la galería -->
+                <div id="gallery-empty" class="gallery-empty hidden">
+                    <i data-lucide="inbox" class="icon-large text-muted"></i>
+                    <p>No se han registrado insectos aún en este filtro.</p>
+                </div>
+            </section>
+            
+        </main>
+        
+        <!-- FOOTER -->
+        <footer class="dashboard-footer">
+            <p>&copy; 2026 Seebug AI Project - Sistema de Reconocimiento y Registro de Trampa para Insectos.</p>
+            <p>Diseño premium optimizado para monitoreo biológico.</p>
+        </footer>
+    </div>
+
+    <!-- NOTIFICACIÓN POPUP REALTIME -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- MODAL DE VISUALIZACIÓN DE IMAGEN -->
+    <div id="image-modal" class="modal">
+        <span class="modal-close">&times;</span>
+        <div class="modal-content-container">
+            <img class="modal-content" id="modal-img" src="" alt="Detección de insecto ampliada">
+            <div id="modal-caption" class="modal-caption"></div>
+        </div>
+    </div>
+
+    <!-- Audio de Notificación -->
+    <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav" preload="auto"></audio>
+
+    <script src="app.js"></script>
+</body>
+</html>
