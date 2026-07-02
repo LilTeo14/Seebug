@@ -395,54 +395,103 @@
             startTMDetectionLoop(currentLoopId);
         }
 
+        async function captureAndPredict() {
+            try {
+                const res = await fetch(`${currentESP32_IP}/capture?cb=${Date.now()}`);
+                const blob = await res.blob();
+                const base64Img = await blobToBase64(blob);
+                const url = URL.createObjectURL(blob);
+                
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.src = url;
+                await new Promise(r => img.onload = r);
+                
+                const predictions = await tmModel.predict(img);
+                URL.revokeObjectURL(url);
+                
+                let topPrediction = predictions[0];
+                for(let i = 1; i < predictions.length; i++) {
+                    if(predictions[i].probability > topPrediction.probability) {
+                        topPrediction = predictions[i];
+                    }
+                }
+                return { prediction: topPrediction, base64Img: base64Img };
+            } catch(e) {
+                console.error("Error en captureAndPredict:", e);
+                return null;
+            }
+        }
+
+        let isValidating = false;
+
         async function startTMDetectionLoop(loopId) {
             while(aiRunning && currentLoopId === loopId) {
-                try {
-                    // 1. Obtener frame limpio y seguro desde la ESP32 (evita errores CORS del MJPEG)
-                    const res = await fetch(`${currentESP32_IP}/capture?cb=${Date.now()}`);
-                    const blob = await res.blob();
-                    
-                    // Convertir a base64 para enviar luego al servidor
-                    const base64Img = await blobToBase64(blob);
-
-                    const url = URL.createObjectURL(blob);
-                    
-                    // 2. Crear una imagen temporal para la IA
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.src = url;
-                    await new Promise(r => img.onload = r);
-
-                    // 3. Teachable Machine analiza la foto
-                    const predictions = await tmModel.predict(img);
-                    URL.revokeObjectURL(url); // Liberar memoria
-                    
-                    // Buscar la predicción más alta
-                    let topPrediction = predictions[0];
-                    for(let i = 1; i < predictions.length; i++) {
-                        if(predictions[i].probability > topPrediction.probability) {
-                            topPrediction = predictions[i];
+                if (!isValidating) {
+                    const result = await captureAndPredict();
+                    if (result) {
+                        const { prediction, base64Img } = result;
+                        const confidence = Math.round(prediction.probability * 100);
+                        document.getElementById('ai-debug').innerText = `TM Vio: ${prediction.className} (${confidence}%)`;
+                        
+                        const classNameLower = prediction.className.toLowerCase();
+                        if (confidence > 80 && !classNameLower.includes("fondo") && !classNameLower.includes("background")) {
+                            const now = Date.now();
+                            if (prediction.className !== lastDetectedSpecies || (now - lastDetectionTime > 10000)) {
+                                
+                                // Iniciar validación
+                                isValidating = true;
+                                document.getElementById('ai-debug').innerText = `Validando ${prediction.className}...`;
+                                
+                                const originalLed = document.getElementById('led-slider').value;
+                                const detected = [prediction.className];
+                                let finalBase64 = base64Img;
+                                
+                                // Prueba 1: 20%
+                                updateLED(51);
+                                await new Promise(r => setTimeout(r, 500));
+                                const res1 = await captureAndPredict();
+                                if (res1) detected.push(res1.prediction.className);
+                                
+                                // Prueba 2: 40%
+                                updateLED(102);
+                                await new Promise(r => setTimeout(r, 500));
+                                const res2 = await captureAndPredict();
+                                if (res2) {
+                                    detected.push(res2.prediction.className);
+                                    finalBase64 = res2.base64Img;
+                                }
+                                
+                                // Restaurar LED
+                                updateLED(originalLed);
+                                
+                                // Votación por mayoría
+                                const counts = {};
+                                let winner = null;
+                                let maxCount = 0;
+                                for (const s of detected) {
+                                    counts[s] = (counts[s] || 0) + 1;
+                                    if (counts[s] > maxCount) {
+                                        maxCount = counts[s];
+                                        winner = s;
+                                    }
+                                }
+                                
+                                if (maxCount >= 2 && !winner.toLowerCase().includes("fondo") && !winner.toLowerCase().includes("background")) {
+                                    lastDetectionTime = Date.now();
+                                    lastDetectedSpecies = winner;
+                                    registerDetection(winner, finalBase64);
+                                    document.getElementById('ai-debug').innerText = `Validado: ${winner}`;
+                                } else {
+                                    document.getElementById('ai-debug').innerText = `Falso positivo descartado.`;
+                                }
+                                
+                                isValidating = false;
+                            }
                         }
+                    } else {
+                        document.getElementById('ai-debug').innerText = "Error leyendo imagen de cámara.";
                     }
-
-                    const confidence = Math.round(topPrediction.probability * 100);
-                    document.getElementById('ai-debug').innerText = `TM Vio: ${topPrediction.className} (${confidence}%)`;
-                    
-                    // Solo registrar si la seguridad es mayor al 80% y la clase NO contiene la palabra "fondo"
-                    const classNameLower = topPrediction.className.toLowerCase();
-                    if (confidence > 80 && !classNameLower.includes("fondo") && !classNameLower.includes("background")) {
-                        const now = Date.now();
-                        // Prevenir spam: 10 segundos de cooldown SOLO para la misma especie
-                        if (topPrediction.className !== lastDetectedSpecies || (now - lastDetectionTime > 10000)) {
-                            lastDetectionTime = now;
-                            lastDetectedSpecies = topPrediction.className;
-                            registerDetection(topPrediction.className, base64Img);
-                        }
-                    }
-
-                } catch(e) {
-                    console.error("Error en el bucle de TM:", e);
-                    document.getElementById('ai-debug').innerText = "Error leyendo imagen de cámara.";
                 }
                 
                 // Teachable Machine es ultra rápido, podemos analizar un frame por segundo!
