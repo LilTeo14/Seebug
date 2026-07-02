@@ -337,6 +337,7 @@
         // --- INTEGRADOR TEACHABLE MACHINE ---
         let aiRunning = false;
         let lastDetectionTime = 0;
+        let lastDetectedSpecies = "";
         let currentLoopId = 0;
         let tmModel = null;
 
@@ -431,9 +432,10 @@
                     const classNameLower = topPrediction.className.toLowerCase();
                     if (confidence > 80 && !classNameLower.includes("fondo") && !classNameLower.includes("background")) {
                         const now = Date.now();
-                        // Prevenir spam: 10 segundos de cooldown
-                        if (now - lastDetectionTime > 10000) {
+                        // Prevenir spam: 10 segundos de cooldown SOLO para la misma especie
+                        if (topPrediction.className !== lastDetectedSpecies || (now - lastDetectionTime > 10000)) {
                             lastDetectionTime = now;
+                            lastDetectedSpecies = topPrediction.className;
                             registerDetection(topPrediction.className, base64Img);
                         }
                     }
