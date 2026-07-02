@@ -6,88 +6,167 @@
     <title>BICHOS - Edge AI Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- TensorFlow.js & Teachable Machine -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        body { 
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: #f8fafc; 
+            font-family: 'Outfit', sans-serif; 
+            min-height: 100vh;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.5); border-radius: 4px; }
+        .nav-tab.active {
+            border-bottom: 2px solid #34d399;
+            color: #34d399;
+            background: rgba(52, 211, 153, 0.1);
+        }
     </style>
 </head>
 <body class="p-6">
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
-        <header class="mb-8 border-b border-gray-700 pb-4 flex justify-between items-end">
+        <header class="mb-8 pb-4 flex flex-col md:flex-row justify-between items-center gap-4 glass-panel p-4 rounded-2xl mt-4">
             <div>
-                <h1 class="text-3xl font-bold text-emerald-400 flex items-center gap-2">
+                <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-indigo-400 flex items-center gap-2">
                     🪲 Proyecto BICHOS
-                    <span class="text-sm bg-emerald-900 text-emerald-300 px-3 py-1 rounded-full ml-4 font-normal tracking-wide">Modo Standalone (Sin Servidor)</span>
                 </h1>
-                <p class="text-gray-400 mt-1">Sistema de Monitoreo Entomológico Inteligente</p>
+                <p class="text-gray-400 mt-1 text-sm">Sistema de Monitoreo Entomológico Inteligente</p>
             </div>
-            <div class="flex gap-2">
-                <input type="text" id="esp32-ip" value="192.168.1.100" class="bg-gray-800 border border-gray-600 text-white text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2" placeholder="IP ESP32-CAM">
-                <button onclick="updateCameraIP()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition">Conectar</button>
+            
+            <!-- Tabs -->
+            <div class="flex space-x-2 bg-gray-900/50 p-1 rounded-xl">
+                <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-tab active px-6 py-2 rounded-lg font-medium transition-all duration-300 flex items-center gap-2 text-gray-300 hover:text-white">
+                    📡 Vista en Vivo
+                </button>
+                <button onclick="switchView('gallery')" id="tab-gallery" class="nav-tab px-6 py-2 rounded-lg font-medium transition-all duration-300 flex items-center gap-2 text-gray-300 hover:text-white">
+                    🖼️ Galería
+                </button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                <input type="text" id="tm-model-url" value="https://teachablemachine.withgoogle.com/models/7L4kgtcOc/" class="bg-gray-900/80 border border-indigo-500/50 text-white text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 w-full md:w-64 transition-all" placeholder="URL del Modelo TM">
+                <input type="text" id="esp32-ip" value="10.80.212.208" class="bg-gray-900/80 border border-emerald-500/50 text-white text-sm rounded-xl focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 w-full md:w-40 transition-all" placeholder="IP ESP32-CAM">
+                <button onclick="updateCameraIP()" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium py-2 px-6 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] whitespace-nowrap">Conectar</button>
             </div>
         </header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Video Column -->
-            <div class="lg:col-span-2 space-y-6">
-                <div class="bg-gray-800 p-1 rounded-2xl shadow-xl border border-gray-700">
-                    <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden flex items-center justify-center">
-                        <div id="video-loader" class="absolute flex flex-col items-center z-0">
-                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mb-2"></div>
-                            <span class="text-gray-400 text-sm mt-2 font-medium">Ingresa la IP y presiona Conectar...</span>
+        <!-- DASHBOARD VIEW -->
+        <div id="view-dashboard" class="transition-opacity duration-500">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Video Column -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="glass-panel p-1 rounded-2xl relative group">
+                        <!-- Banner de Detección (Oculto por defecto) -->
+                        <div id="detection-banner" class="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 px-6 py-3 rounded-full opacity-0 translate-y-[-20px] transition-all duration-500 pointer-events-none flex items-center gap-2">
+                            <span id="banner-icon"></span>
+                            <span id="banner-text"></span>
                         </div>
-                        <img id="camera-stream" src="" class="relative z-10 w-full h-full object-contain hidden" alt="Stream en vivo" 
-                             onload="this.classList.remove('hidden'); document.getElementById('video-loader').style.display='none';" 
-                             onerror="this.classList.add('hidden'); document.getElementById('video-loader').style.display='flex';">
+                        
+                        <div class="absolute inset-0 bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-2xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-500 pointer-events-none"></div>
+                        <div class="relative w-full aspect-video bg-gray-950 rounded-xl overflow-hidden flex items-center justify-center border border-gray-800">
+                            <div id="video-loader" class="absolute flex flex-col items-center z-0">
+                                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mb-2"></div>
+                                <span class="text-gray-400 text-sm mt-2 font-medium">Ingresa la IP y presiona Conectar...</span>
+                            </div>
+                            <img id="camera-stream" src="" class="relative z-10 w-full h-full object-contain hidden transition-opacity duration-500" alt="Stream en vivo" 
+                                 onload="this.classList.remove('hidden'); document.getElementById('video-loader').style.display='none';" 
+                                 onerror="this.classList.add('hidden'); document.getElementById('video-loader').style.display='flex';">
+                        </div>
                     </div>
-                </div>
 
-                <!-- Metrics Cards -->
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 shadow-md">
-                        <p class="text-gray-400 text-sm font-medium">Capturas Totales</p>
-                        <p class="text-3xl font-bold mt-1 text-white" id="stat-total">0</p>
+                    <!-- Metrics Cards -->
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="glass-panel p-5 rounded-xl border-t border-t-white/10 hover:-translate-y-1 transition-transform duration-300">
+                            <p class="text-gray-400 text-sm font-medium">Capturas Totales</p>
+                            <p class="text-4xl font-bold mt-1 text-white drop-shadow-md" id="stat-total">0</p>
+                        </div>
+                        <div class="bg-rose-900/20 backdrop-blur-md p-5 rounded-xl border border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.1)] hover:-translate-y-1 transition-all duration-300" id="card-plagas">
+                            <p class="text-rose-400 text-sm font-medium">Plagas Detectadas</p>
+                            <p class="text-4xl font-bold mt-1 text-rose-200 drop-shadow-md" id="stat-plagas">0</p>
+                        </div>
+                        <div class="bg-emerald-900/20 backdrop-blur-md p-5 rounded-xl border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)] hover:-translate-y-1 transition-all duration-300" id="card-nativos">
+                            <p class="text-emerald-400 text-sm font-medium">Nativos Detectados</p>
+                            <p class="text-4xl font-bold mt-1 text-emerald-200 drop-shadow-md" id="stat-nativos">0</p>
+                        </div>
                     </div>
-                    <div class="bg-rose-900/30 p-5 rounded-xl border border-rose-800/50 shadow-md transition-all duration-300" id="card-plagas">
-                        <p class="text-rose-400 text-sm font-medium">Plagas Retenidas</p>
-                        <p class="text-3xl font-bold mt-1 text-rose-200" id="stat-plagas">0</p>
+
+                    <div class="flex gap-4">
+                        <button id="btn-ai" onclick="toggleAI()" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium py-4 px-6 rounded-xl transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)] flex items-center justify-center gap-2 text-lg">
+                            <span class="animate-pulse">🧠</span> Activar Teachable Machine
+                        </button>
+                        <button onclick="clearLogs()" class="bg-red-900/30 hover:bg-red-900/50 text-red-200 font-medium py-4 px-6 rounded-xl transition-all border border-red-800/50 backdrop-blur-sm">Borrar Historial</button>
                     </div>
-                    <div class="bg-emerald-900/30 p-5 rounded-xl border border-emerald-800/50 shadow-md transition-all duration-300" id="card-nativos">
-                        <p class="text-emerald-400 text-sm font-medium">Nativos Liberados</p>
-                        <p class="text-3xl font-bold mt-1 text-emerald-200" id="stat-nativos">0</p>
-                    </div>
+                    <!-- Debug IA -->
+                    <div id="ai-debug" class="text-xs text-center text-indigo-300/70 mt-2 font-mono h-4">IA inactiva</div>
                 </div>
-                
-                <div class="flex gap-4">
-                    <button onclick="simulateDetection()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-xl transition border border-gray-600">Simular Detección de IA</button>
-                    <button onclick="clearLogs()" class="bg-red-900/50 hover:bg-red-800/50 text-red-200 font-medium py-3 px-4 rounded-xl transition border border-red-800/50">Borrar Historial</button>
-                </div>
-            </div>
 
             <!-- Side Column -->
             <div class="space-y-6">
+                <!-- LED Control -->
+                <div class="glass-panel p-6 rounded-xl">
+                    <h2 class="text-lg font-semibold mb-4 text-white flex items-center gap-2">
+                        💡 Intensidad de Luz
+                    </h2>
+                    <div class="flex items-center gap-4 bg-gray-900/50 p-4 rounded-lg border border-gray-700/50">
+                        <span class="text-gray-400 text-sm">Off</span>
+                        <input type="range" id="led-slider" min="0" max="255" value="0" 
+                               class="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500" 
+                               onchange="updateLED(this.value)" 
+                               oninput="document.getElementById('led-val').innerText = Math.round((this.value/255)*100) + '%'">
+                        <span id="led-val" class="text-emerald-400 font-bold text-sm min-w-[3rem] text-right">0%</span>
+                    </div>
+                </div>
+
                 <!-- Chart -->
-                <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 shadow-md">
-                    <h2 class="text-lg font-semibold mb-4 text-gray-200">Balance Poblacional</h2>
+                <div class="glass-panel p-6 rounded-xl">
+                    <h2 class="text-lg font-semibold mb-4 text-white">Balance Poblacional</h2>
                     <div class="relative h-48 w-full flex justify-center">
                         <canvas id="populationChart"></canvas>
                     </div>
                 </div>
 
                 <!-- Log -->
-                <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 shadow-md flex-1">
-                    <h2 class="text-lg font-semibold mb-4 text-gray-200">Bitácora de Eventos</h2>
-                    <div class="overflow-y-auto h-64 pr-2 custom-scrollbar">
+                <div class="glass-panel p-6 rounded-xl flex-1 flex flex-col h-[320px]">
+                    <h2 class="text-lg font-semibold mb-4 text-white">Bitácora de Eventos</h2>
+                    <div class="overflow-y-auto pr-2 custom-scrollbar flex-1">
                         <table class="w-full text-left text-sm">
-                            <tbody id="log-table" class="divide-y divide-gray-700">
+                            <tbody id="log-table" class="divide-y divide-gray-700/50">
                                 <!-- Filas generadas por JS -->
                             </tbody>
                         </table>
                     </div>
                 </div>
+            </div>
+        </div>
+        </div>
+    </div>
+
+    <!-- GALLERY VIEW -->
+    <div id="view-gallery" class="hidden opacity-0 transition-opacity duration-500 pt-4 pb-10">
+        <div class="glass-panel p-8 rounded-2xl min-h-[70vh]">
+            <div class="flex justify-between items-center mb-8 pb-4 border-b border-gray-700/50">
+                <h2 class="text-2xl font-bold text-white flex items-center gap-2">🖼️ Galería Histórica de Registros</h2>
+                <button onclick="loadGallery()" class="text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-2 text-sm bg-emerald-900/30 hover:bg-emerald-900/50 px-4 py-2 rounded-lg border border-emerald-800/50">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Actualizar
+                </button>
+            </div>
+            
+            <div id="gallery-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- Las fotos se cargarán aquí dinámicamente -->
+                <div class="text-center col-span-full text-gray-500 py-10">Cargando registros...</div>
             </div>
         </div>
     </div>
@@ -108,7 +187,7 @@
         function updateCameraIP() {
             const ip = document.getElementById('esp32-ip').value;
             currentESP32_IP = `http://${ip}`;
-            document.getElementById('camera-stream').src = `${currentESP32_IP}/stream?cb=` + Date.now();
+            document.getElementById('camera-stream').src = `${currentESP32_IP}:81/stream?cb=` + Date.now();
         }
 
         // --- GRÁFICO ---
@@ -119,7 +198,7 @@
                 labels: ['Plagas', 'Nativos'],
                 datasets: [{
                     data: [stats.plagas, stats.nativos],
-                    backgroundColor: ['#fb7185', '#34d399'],
+                    backgroundColor: ['#f43f5e', '#10b981'],
                     borderWidth: 0,
                     hoverOffset: 4
                 }]
@@ -148,7 +227,6 @@
                 row.innerHTML = `
                     <td class="py-2 px-1 text-gray-400 text-xs">${log.time}</td>
                     <td class="py-2 font-medium ${textColor}">${log.species}</td>
-                    <td class="py-2 text-right"><span class="text-xs bg-gray-700 px-2 py-1 rounded">${log.action}</span></td>
                 `;
                 tbody.appendChild(row);
             });
@@ -164,40 +242,281 @@
             updateUI();
         }
 
-        function triggerServoAction() {
-            if(!currentESP32_IP) return;
-            // Llamamos a la ruta de la ESP32 para mover el motor
-            fetch(`${currentESP32_IP}/action`)
-                .then(res => console.log("Señal de escape enviada a ESP32"))
-                .catch(err => console.error("Error al conectar con ESP32:", err));
+        // --- LOGICA DE UI Y SERVIDOR LOCAL ---
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
         }
 
-        function simulateDetection() {
-            const isNativo = Math.random() > 0.5;
-            const species = isNativo ? "Adalia angulifera" : "Agrotis ipsilon";
-            const role = isNativo ? "Nativo" : "Plaga";
-            const action = isNativo ? "Liberado (Rampa abierta)" : "Retenido";
+        function switchView(viewName) {
+            const dashboard = document.getElementById('view-dashboard');
+            const gallery = document.getElementById('view-gallery');
+            const tabDash = document.getElementById('tab-dashboard');
+            const tabGal = document.getElementById('tab-gallery');
+
+            if (viewName === 'dashboard') {
+                gallery.classList.add('opacity-0');
+                setTimeout(() => {
+                    gallery.classList.add('hidden');
+                    dashboard.classList.remove('hidden');
+                    // Pequeño delay para la animación de opacidad
+                    setTimeout(() => dashboard.classList.remove('opacity-0'), 50);
+                }, 300);
+                
+                tabDash.classList.add('active', 'bg-emerald-900/20');
+                tabGal.classList.remove('active', 'bg-emerald-900/20');
+            } else if (viewName === 'gallery') {
+                dashboard.classList.add('opacity-0');
+                setTimeout(() => {
+                    dashboard.classList.add('hidden');
+                    gallery.classList.remove('hidden');
+                    setTimeout(() => gallery.classList.remove('opacity-0'), 50);
+                    loadGallery(); // Cargar la galería automáticamente al abrir la pestaña
+                }, 300);
+                
+                tabGal.classList.add('active', 'bg-emerald-900/20');
+                tabDash.classList.remove('active', 'bg-emerald-900/20');
+            }
+        }
+
+        async function loadGallery() {
+            const grid = document.getElementById('gallery-grid');
+            try {
+                const res = await fetch('/api/gallery');
+                if(!res.ok) throw new Error("Error fetching gallery");
+                const data = await res.json();
+                
+                if (data.length === 0) {
+                    grid.innerHTML = '<div class="text-center col-span-full text-gray-500 py-10">No hay fotos guardadas en el servidor todavía.</div>';
+                    return;
+                }
+
+                grid.innerHTML = '';
+                data.forEach(item => {
+                    const dateObj = new Date(item.timestamp);
+                    const isPlaga = item.role === "Plaga";
+                    const badgeColor = isPlaga ? "bg-rose-900/80 text-rose-300 border-rose-700" : "bg-emerald-900/80 text-emerald-300 border-emerald-700";
+                    
+                    const card = document.createElement('div');
+                    card.className = "bg-gray-900 rounded-xl overflow-hidden border border-gray-700 shadow-lg group";
+                    card.innerHTML = `
+                        <div class="relative aspect-[4/3] bg-black overflow-hidden">
+                            <img src="/registros/${item.filename}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy">
+                            <div class="absolute top-2 right-2 px-2 py-1 rounded-md text-xs font-bold border ${badgeColor}">
+                                ${item.role}
+                            </div>
+                        </div>
+                        <div class="p-4">
+                            <h3 class="text-white font-semibold truncate" title="${item.species}">${item.species}</h3>
+                            <p class="text-xs text-gray-400 mt-1">${dateObj.toLocaleDateString()} - ${dateObj.toLocaleTimeString()}</p>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (e) {
+                console.error(e);
+                grid.innerHTML = '<div class="text-center col-span-full text-red-400 py-10">Error de conexión. Asegúrate de estar ejecutando el servidor Node.js localmente.</div>';
+            }
+        }
+
+        function updateLED(intensity) {
+            if(!currentESP32_IP) {
+                alert("Primero debes ingresar la IP y presionar Conectar.");
+                return;
+            }
+            fetch(`${currentESP32_IP}/led?v=${intensity}`)
+                .then(res => console.log(`Intensidad LED ajustada a ${intensity}`))
+                .catch(err => console.error("Error al ajustar LED:", err));
+        }
+
+        // --- INTEGRADOR TEACHABLE MACHINE ---
+        let aiRunning = false;
+        let lastDetectionTime = 0;
+        let currentLoopId = 0;
+        let tmModel = null;
+
+        // Función para convertir Blob a Base64
+        async function loadTMModel() {
+            const urlInput = document.getElementById('tm-model-url').value.trim();
+            if(!urlInput) {
+                alert("Debes ingresar la URL de tu modelo de Teachable Machine.");
+                return false;
+            }
+            let URL = urlInput;
+            if (!URL.endsWith('/')) URL += '/';
             
-            // Actualizar datos
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            try {
+                document.getElementById('ai-debug').innerText = "Descargando modelo...";
+                tmModel = await tmImage.load(modelURL, metadataURL);
+                return true;
+            } catch (e) {
+                console.error("Error al cargar el modelo:", e);
+                document.getElementById('ai-debug').innerText = "Error cargando modelo. Revisa la URL.";
+                return false;
+            }
+        }
+
+        async function toggleAI() {
+            if(!currentESP32_IP) {
+                alert("Primero debes conectar la cámara.");
+                return;
+            }
+            
+            const btn = document.getElementById('btn-ai');
+            if (aiRunning) {
+                aiRunning = false;
+                btn.innerHTML = "🧠 Activar Teachable Machine";
+                btn.classList.replace("bg-rose-600", "bg-indigo-600");
+                btn.classList.replace("hover:bg-rose-700", "hover:bg-indigo-700");
+                document.getElementById('ai-debug').innerText = "IA en espera...";
+                return;
+            }
+            
+            const modelLoaded = await loadTMModel();
+            if(!modelLoaded) return;
+            
+            aiRunning = true;
+            currentLoopId++;
+            btn.innerHTML = "🛑 Detener Teachable Machine";
+            btn.classList.replace("bg-indigo-600", "bg-rose-600");
+            btn.classList.replace("hover:bg-indigo-700", "hover:bg-rose-700");
+            document.getElementById('ai-debug').innerText = "Iniciando análisis...";
+            
+            // Iniciar bucle de reconocimiento (Teachable Machine)
+            startTMDetectionLoop(currentLoopId);
+        }
+
+        async function startTMDetectionLoop(loopId) {
+            while(aiRunning && currentLoopId === loopId) {
+                try {
+                    // 1. Obtener frame limpio y seguro desde la ESP32 (evita errores CORS del MJPEG)
+                    const res = await fetch(`${currentESP32_IP}/capture?cb=${Date.now()}`);
+                    const blob = await res.blob();
+                    
+                    // Convertir a base64 para enviar luego al servidor
+                    const base64Img = await blobToBase64(blob);
+
+                    const url = URL.createObjectURL(blob);
+                    
+                    // 2. Crear una imagen temporal para la IA
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = url;
+                    await new Promise(r => img.onload = r);
+
+                    // 3. Teachable Machine analiza la foto
+                    const predictions = await tmModel.predict(img);
+                    URL.revokeObjectURL(url); // Liberar memoria
+                    
+                    // Buscar la predicción más alta
+                    let topPrediction = predictions[0];
+                    for(let i = 1; i < predictions.length; i++) {
+                        if(predictions[i].probability > topPrediction.probability) {
+                            topPrediction = predictions[i];
+                        }
+                    }
+
+                    const confidence = Math.round(topPrediction.probability * 100);
+                    document.getElementById('ai-debug').innerText = `TM Vio: ${topPrediction.className} (${confidence}%)`;
+                    
+                    // Solo registrar si la seguridad es mayor al 80% y la clase NO contiene la palabra "fondo"
+                    const classNameLower = topPrediction.className.toLowerCase();
+                    if (confidence > 80 && !classNameLower.includes("fondo") && !classNameLower.includes("background")) {
+                        const now = Date.now();
+                        // Prevenir spam: 10 segundos de cooldown
+                        if (now - lastDetectionTime > 10000) {
+                            lastDetectionTime = now;
+                            registerDetection(topPrediction.className, base64Img);
+                        }
+                    }
+
+                } catch(e) {
+                    console.error("Error en el bucle de TM:", e);
+                    document.getElementById('ai-debug').innerText = "Error leyendo imagen de cámara.";
+                }
+                
+                // Teachable Machine es ultra rápido, podemos analizar un frame por segundo!
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
+        
+        // --- CORE LOGIC ---
+        function registerDetection(species, imageBase64 = null) {
+            // Clasificar según la especie detectada por la IA
+            const nativos = ["Abejorro Chileno", "Avispa Alfarera"];
+            const isNativo = nativos.includes(species);
+            
+            const role = isNativo ? "Nativo" : "Plaga";
+            const colorClass = isNativo ? "text-emerald-400" : "text-rose-400";
+            const bgClass = isNativo ? "bg-emerald-900/20" : "bg-rose-900/20";
+
+            // --- Banner Visual ---
+            const banner = document.getElementById('detection-banner');
+            const bannerText = document.getElementById('banner-text');
+            const bannerIcon = document.getElementById('banner-icon');
+            
+            bannerText.innerText = species + " Detectado";
+            bannerIcon.innerText = isNativo ? "🌿" : "⚠️";
+            
+            if (isNativo) {
+                banner.className = "absolute top-4 left-1/2 transform -translate-x-1/2 z-20 px-8 py-3 rounded-full bg-emerald-600/90 text-white font-bold text-2xl shadow-[0_0_30px_rgba(16,185,129,0.8)] backdrop-blur-md transition-all duration-500 pointer-events-none flex items-center gap-3";
+            } else {
+                banner.className = "absolute top-4 left-1/2 transform -translate-x-1/2 z-20 px-8 py-3 rounded-full bg-rose-600/90 text-white font-bold text-2xl shadow-[0_0_30px_rgba(225,29,72,0.8)] backdrop-blur-md transition-all duration-500 pointer-events-none flex items-center gap-3";
+            }
+            
+            // Animar entrada del banner
+            banner.classList.remove('opacity-0', 'translate-y-[-20px]');
+            banner.classList.add('opacity-100', 'translate-y-0');
+            
+            // Ocultar banner después de 4 segundos
+            setTimeout(() => {
+                if(banner) {
+                    banner.classList.add('opacity-0', 'translate-y-[-20px]');
+                    banner.classList.remove('opacity-100', 'translate-y-0');
+                }
+            }, 4000);
+
+            // Guardar en el servidor backend local si tenemos la imagen
+            if (imageBase64) {
+                // Hacemos el fetch en segundo plano (sin await) para no frenar la IA
+                fetch('/api/save-detection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        species: species,
+                        role: role,
+                        imageBase64: imageBase64
+                    })
+                }).catch(e => console.error("Error guardando respaldo de imagen:", e));
+            }
+
+            // Actualizar Estadísticas
             stats.total++;
             if(isNativo) stats.nativos++; else stats.plagas++;
             
             const timeStr = new Date().toLocaleTimeString();
-            logs.unshift({ time: timeStr, species, role, action });
-            if(logs.length > 20) logs.pop(); // Mantener solo últimos 20
+            logs.unshift({ time: timeStr, species: species, role: role });
+            if(logs.length > 20) logs.pop();
 
             // Animar tarjeta
             const cardId = isNativo ? 'card-nativos' : 'card-plagas';
             const card = document.getElementById(cardId);
-            card.classList.add('scale-105', 'ring', 'ring-white/50');
-            setTimeout(() => card.classList.remove('scale-105', 'ring', 'ring-white/50'), 500);
+            if (card) {
+                card.classList.add('scale-105', 'ring', 'ring-white/50');
+                setTimeout(() => card.classList.remove('scale-105', 'ring', 'ring-white/50'), 500);
+            }
 
             updateUI();
-
-            // Si es nativo, le avisamos a la ESP32 que abra la rampa
-            if(isNativo) {
-                triggerServoAction();
-            }
         }
 
         // Iniciar interfaz

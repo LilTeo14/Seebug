@@ -1,0 +1,25 @@
+{
+  "name": "seebug",
+  "version": "1.0.0",
+  "description": "Este proyecto consiste en un sistema completo de monitoreo biológico en tiempo real utilizando una cámara **ESP32-CAM** en una trampa de insectos, un backend en Python impulsado por **FastAPI** e Inteligencia Artificial (**YOLO**), y un **Dashboard Web** interactivo de diseño premium.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LilTeo14/Seebug.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/LilTeo14/Seebug/issues"
+  },
+  "homepage": "https://github.com/LilTeo14/Seebug#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  }
+}
